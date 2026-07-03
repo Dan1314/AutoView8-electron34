@@ -25,19 +25,32 @@ if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\
 set DEPOT_TOOLS_WIN_TOOLCHAIN=0
 cd /d %USERPROFILE%
 
-if not exist depot_tools (
+REM Junction/cache may create an empty depot_tools dir — verify gclient.bat exists
+if not exist depot_tools\gclient.bat (
     echo =====[ Getting Depot Tools ]=====
+    if exist depot_tools rmdir /s /q depot_tools
     powershell -NoProfile -Command "Invoke-WebRequest -Uri https://storage.googleapis.com/chrome-infra/depot_tools.zip -OutFile depot_tools.zip"
+    if errorlevel 1 exit /b 1
     powershell -NoProfile -Command "Expand-Archive -Path depot_tools.zip -DestinationPath depot_tools -Force"
+    if errorlevel 1 exit /b 1
     del depot_tools.zip
+)
+if not exist depot_tools\gclient.bat (
+    echo ERROR: depot_tools incomplete — gclient.bat missing
+    exit /b 1
 )
 set PATH=%CD%\depot_tools;%PATH%
 call gclient
+if errorlevel 1 (
+    echo ERROR: gclient bootstrap failed
+    exit /b 1
+)
 
 if not exist v8 mkdir v8
 cd v8
 
-if not exist v8 (
+REM Same empty-junction issue for cached v8 checkout root
+if not exist v8\.git (
     echo =====[ fetch v8 ]=====
     call fetch v8
     if errorlevel 1 exit /b 1
@@ -51,7 +64,7 @@ echo =====[ checkout %V8_VERSION% ]=====
 git fetch --tags --force
 git checkout %V8_VERSION%
 if errorlevel 1 exit /b 1
-call gclient sync -D
+call gclient sync
 if errorlevel 1 exit /b 1
 call gclient runhooks
 if errorlevel 1 exit /b 1

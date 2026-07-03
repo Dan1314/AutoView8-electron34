@@ -44,13 +44,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/depot_tools
-          key: depot-tools-win-${{ runner.os }}-v1
+          key: depot-tools-win-${{ runner.os }}-v2
 
       - name: Cache V8 source tree
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/v8
-          key: v8-source-${{ env.V8_VERSION }}-windows-v1
+          key: v8-source-${{ env.V8_VERSION }}-windows-v2
 
       - name: Prepare cache-friendly paths
         shell: pwsh
@@ -58,20 +58,28 @@ jobs:
           $dt = "${{ runner.temp }}/depot_tools"
           $v8 = "${{ runner.temp }}/v8"
           New-Item -ItemType Directory -Force -Path $dt, $v8 | Out-Null
-          if (-not (Test-Path "$env:USERPROFILE/depot_tools")) {
-            New-Item -ItemType Junction -Path "$env:USERPROFILE/depot_tools" -Target $dt | Out-Null
+
+          foreach ($pair in @(
+            @{ Name = 'depot_tools'; Target = $dt },
+            @{ Name = 'v8'; Target = $v8 }
+          )) {
+            $link = Join-Path $env:USERPROFILE $pair.Name
+            if (Test-Path $link) { Remove-Item $link -Recurse -Force }
+            New-Item -ItemType Junction -Path $link -Target $pair.Target | Out-Null
           }
-          if (-not (Test-Path "$env:USERPROFILE/v8")) {
-            New-Item -ItemType Junction -Path "$env:USERPROFILE/v8" -Target $v8 | Out-Null
-          }
+
+          Write-Host "depot_tools gclient.bat: $(Test-Path (Join-Path $dt 'gclient.bat'))"
+          Write-Host "v8 checkout .git: $(Test-Path (Join-Path $v8 'v8\.git'))"
 
       - name: Build v8dasm
         shell: cmd
         env:
           DEPOT_TOOLS_WIN_TOOLCHAIN: 0
         run: |
-          call scripts\v8dasm-builders\build-windows-electron34.cmd
-          if errorlevel 1 exit /b 1
+          call scripts\v8dasm-builders\build-windows-electron34.cmd > build-step.log 2>&1
+          set BUILD_EXIT=%ERRORLEVEL%
+          type build-step.log
+          if %BUILD_EXIT% neq 0 exit /b %BUILD_EXIT%
 
       - name: Upload patch log on failure
         if: failure()
@@ -80,6 +88,7 @@ jobs:
           name: build-failure-logs
           path: |
             patch-state.log
+            build-step.log
           if-no-files-found: ignore
           retention-days: 7
 
