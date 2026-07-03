@@ -1,15 +1,6 @@
 name: Build V8 Disassembler (v8dasm)
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'Disassembler/**'
-      - 'scripts/v8dasm-builders/**'
-      - 'configs/v8-versions.json'
-      - '.github/workflows/build-v8dasm.yml'
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       v8_version:

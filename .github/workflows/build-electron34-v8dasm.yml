@@ -67,8 +67,21 @@ jobs:
 
       - name: Build v8dasm
         shell: cmd
+        env:
+          DEPOT_TOOLS_WIN_TOOLCHAIN: 0
         run: |
-          call scripts\v8dasm-builders\build-windows.cmd %V8_VERSION% "%ELECTRON_BUILD_ARGS%"
+          call scripts\v8dasm-builders\build-windows-electron34.cmd
+          if errorlevel 1 exit /b 1
+
+      - name: Upload patch log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-logs
+          path: |
+            patch-state.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Stage View8 binary layout
         shell: pwsh
