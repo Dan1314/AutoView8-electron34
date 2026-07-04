@@ -21,3 +21,4 @@ v8_enable_snapshot_native_code_counters = false
 v8_enable_javascript_promise_hooks = true
 v8_enable_private_mapping_fork_optimization = true
 v8_expose_public_symbols = true
+extra_cflags = [ "/D_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS" ]

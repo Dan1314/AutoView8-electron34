@@ -44,13 +44,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/depot_tools
-          key: depot-tools-win-${{ runner.os }}-v2
+          key: depot-tools-win-${{ runner.os }}-v3
 
       - name: Cache V8 source tree
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/v8
-          key: v8-source-${{ env.V8_VERSION }}-windows-v2
+          key: v8-source-${{ env.V8_VERSION }}-windows-v3
 
       - name: Prepare cache-friendly paths
         shell: pwsh
@@ -81,6 +81,10 @@ jobs:
           cmd /c "call scripts\v8dasm-builders\build-windows-electron34.cmd 1>build-step.log 2>&1"
           if ($LASTEXITCODE -ne 0) {
             Get-Content build-step.log -Tail 80
+            if (Test-Path build-step.log) {
+              "`n## Build tail (last 80 lines)`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              Get-Content build-step.log -Tail 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
             exit $LASTEXITCODE
           }
           Get-Content build-step.log -Tail 40

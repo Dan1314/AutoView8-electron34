@@ -20,7 +20,11 @@ if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\
     call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
 ) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
     call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
+    call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 )
+
+set _CL_=/D_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS
 
 set DEPOT_TOOLS_WIN_TOOLCHAIN=0
 cd /d %USERPROFILE%
@@ -69,17 +73,10 @@ if errorlevel 1 exit /b 1
 call gclient runhooks
 if errorlevel 1 exit /b 1
 
-echo =====[ Applying patches ]=====
-set PATCH_FILE=%WORKSPACE_DIR%\Disassembler\v8.patch
+echo =====[ Applying patches (13.2.152.41) ]=====
 set PATCH_LOG=%WORKSPACE_DIR%\patch-state.log
 
-call "%WORKSPACE_DIR%\scripts\v8dasm-builders\patch-utils\apply-patch.cmd" "%PATCH_FILE%" "%V8_DIR%" "%PATCH_LOG%" "true"
-if errorlevel 1 (
-    echo ERROR: apply-patch.cmd failed
-    if exist "%PATCH_LOG%" type "%PATCH_LOG%"
-    exit /b 1
-)
-
+REM Legacy v8.patch targets older V8 APIs; Electron 34 uses apply-patch-13_2.py only.
 python "%WORKSPACE_DIR%\scripts\v8dasm-builders\patch-utils\apply-patch-13_2.py" "%V8_DIR%" "%PATCH_LOG%"
 if errorlevel 1 (
     echo ERROR: apply-patch-13_2.py failed
@@ -88,6 +85,17 @@ if errorlevel 1 (
 )
 
 echo =====[ gn gen (electron34-args.gn) ]=====
+if exist out.gn\x64.release\obj\v8_monolith.lib (
+    for %%F in ("out.gn\x64.release\obj\v8_monolith.lib") do set EXISTING_MONOLITH=%%~zF
+) else (
+    set EXISTING_MONOLITH=0
+)
+if %EXISTING_MONOLITH% LSS 50000000 (
+    if exist out.gn (
+        echo Removing stale/incomplete out.gn ^(monolith=%EXISTING_MONOLITH% bytes^)
+        rmdir /s /q out.gn
+    )
+)
 if not exist out.gn\x64.release mkdir out.gn\x64.release
 copy /Y "%WORKSPACE_DIR%\configs\electron34-args.gn" out.gn\x64.release\args.gn
 call gn gen out.gn\x64.release

@@ -34,8 +34,6 @@ def main() -> int:
 
     v8_dir = Path(sys.argv[1])
     log_file = Path(sys.argv[2]) if len(sys.argv) > 2 else None
-    if log_file and log_file.exists():
-        log_file.write_text("", encoding="utf-8")
 
     log("=== View8 patch for V8 13.2.152.41 (Electron 34) ===", log_file)
     ok = True
@@ -105,7 +103,7 @@ def main() -> int:
     return MaybeDirectHandle<SharedFunctionInfo>();
   }
 
-  // Check whether the newly deserialized data"""
+  // Check whether the newly deserialized data should be merged into an"""
     replacement = """  DirectHandle<SharedFunctionInfo> result;
   if (!maybe_result.ToHandle(&result)) {
     // Deserializing may fail if the reservations cannot be fulfilled.
