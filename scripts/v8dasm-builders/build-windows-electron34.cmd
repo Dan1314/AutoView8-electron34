@@ -93,29 +93,45 @@ copy /Y "%WORKSPACE_DIR%\configs\electron34-args.gn" out.gn\x64.release\args.gn
 call gn gen out.gn\x64.release
 if errorlevel 1 exit /b 1
 
-echo =====[ ninja v8_monolith (-j2) ]=====
-call ninja -C out.gn\x64.release -j2 v8_monolith
+echo =====[ ninja v8_monolith (-j1) ]=====
+call ninja -C out.gn\x64.release -j1 v8_monolith
 if errorlevel 1 exit /b 1
+
+set OBJ_DIR=%V8_DIR%\out.gn\x64.release\obj
+set MONOLITH_LIB=%OBJ_DIR%\v8_monolith.lib
+if not exist "%MONOLITH_LIB%" (
+    echo ERROR: missing %MONOLITH_LIB%
+    dir "%OBJ_DIR%\v8_*.lib" 2>nul
+    exit /b 1
+)
+for %%F in ("%MONOLITH_LIB%") do set MONOLITH_SIZE=%%~zF
+if %MONOLITH_SIZE% LSS 50000000 (
+    echo ERROR: v8_monolith.lib too small ^(%MONOLITH_SIZE% bytes^) — ninja build likely incomplete
+    exit /b 1
+)
+echo v8_monolith.lib size: %MONOLITH_SIZE% bytes
 
 echo =====[ link v8dasm ]=====
 set OUT_NAME=v8dasm-%V8_VERSION%.exe
 set DASM=%WORKSPACE_DIR%\Disassembler\v8dasm.cpp
 set LLVM_BIN=%V8_DIR%\third_party\llvm-build\Release+Asserts\bin
 
-if not exist "%LLVM_BIN%\clang-cl.exe" (
-    echo ERROR: clang-cl not found at %LLVM_BIN%
+if not exist "%LLVM_BIN%\clang++.exe" (
+    echo ERROR: clang++ not found at %LLVM_BIN%
     exit /b 1
 )
 
-"%LLVM_BIN%\clang-cl.exe" %DASM% /nologo /std:c++20 /O2 /EHsc ^
-    /I%V8_DIR%\include /I%V8_DIR%\gen ^
-    /DV8_COMPRESS_POINTERS /DV8_ENABLE_SANDBOX ^
-    /Foout.gn\x64.release\v8dasm.obj ^
-    /link /LIBPATH:out.gn\x64.release\obj v8_libbase.lib v8_libplatform.lib v8_monolith.lib winmm.lib Dbghelp.lib ^
-    /OUT:%OUT_NAME%
+set PATH=%LLVM_BIN%;%PATH%
+cd /d %V8_DIR%
+clang++ "%DASM%" -std=c++20 -O2 ^
+    -Iinclude -Igen ^
+    -L"%OBJ_DIR%" ^
+    -lv8_libbase -lv8_libplatform -lv8_monolith ^
+    -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX ^
+    -o "%OUT_NAME%"
 set LINK_RC=%ERRORLEVEL%
 if not %LINK_RC%==0 (
-    echo ERROR: clang-cl link failed with exit code %LINK_RC%
+    echo ERROR: clang++ link failed with exit code %LINK_RC%
     exit /b %LINK_RC%
 )
 

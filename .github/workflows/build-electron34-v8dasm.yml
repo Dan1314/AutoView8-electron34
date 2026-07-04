@@ -64,7 +64,9 @@ jobs:
             @{ Name = 'v8'; Target = $v8 }
           )) {
             $link = Join-Path $env:USERPROFILE $pair.Name
-            if (Test-Path $link) { Remove-Item $link -Recurse -Force }
+            if (Test-Path $link) {
+              cmd /c "rmdir `"$link`" 2>nul"
+            }
             New-Item -ItemType Junction -Path $link -Target $pair.Target | Out-Null
           }
 
@@ -72,18 +74,23 @@ jobs:
           Write-Host "v8 checkout .git: $(Test-Path (Join-Path $v8 'v8\.git'))"
 
       - name: Build v8dasm
-        shell: cmd
+        shell: pwsh
         env:
           DEPOT_TOOLS_WIN_TOOLCHAIN: 0
         run: |
-          call scripts\v8dasm-builders\build-windows-electron34.cmd > build-step.log 2>&1
-          set BUILD_EXIT=%ERRORLEVEL%
-          type build-step.log
-          if %BUILD_EXIT% neq 0 exit /b %BUILD_EXIT%
-          if not exist "Bin\%V8_VERSION%.exe" (
-            echo ERROR: missing staged binary Bin\%V8_VERSION%.exe
-            exit /b 1
-          )
+          cmd /c "call scripts\v8dasm-builders\build-windows-electron34.cmd 1>build-step.log 2>&1"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build-step.log -Tail 80
+            exit $LASTEXITCODE
+          }
+          Get-Content build-step.log -Tail 40
+          $bin = Join-Path $env:GITHUB_WORKSPACE "Bin\$env:V8_VERSION.exe"
+          if (-not (Test-Path $bin)) {
+            Write-Host "ERROR: missing staged binary $bin"
+            Get-ChildItem Bin -ErrorAction SilentlyContinue | Format-Table Name, Length
+            exit 1
+          }
+          Get-Item $bin | Format-List Name, Length, FullName
 
       - name: Upload build logs on failure
         if: failure()
