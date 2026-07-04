@@ -38,15 +38,27 @@ def main() -> int:
     log("=== View8 patch for V8 13.2.152.41 (Electron 34) ===", log_file)
     ok = True
 
+    printer = v8_dir / "src/diagnostics/objects-printer.cc"
+    text = printer.read_text(encoding="utf-8")
+    if "// PrintSourceCode(os);" in text and "SharedFunctionInfoPrint" in text:
+        log("[OK] objects-printer remove PrintSourceCode: already patched", log_file)
+    else:
+        patched, count = re.subn(
+            r"(\n  )PrintSourceCode\(os\);\n(  // Script files are often large[^\n]*)",
+            r"\1// PrintSourceCode(os);\n\2",
+            text,
+            count=1,
+        )
+        if count == 0:
+            log("[FAIL] objects-printer remove PrintSourceCode: anchor not found", log_file)
+            ok = False
+        else:
+            printer.write_text(patched, encoding="utf-8")
+            log("[OK] objects-printer remove PrintSourceCode: patched", log_file)
+            text = patched
+
     ok &= patch_file(
-        v8_dir / "src/diagnostics/objects-printer.cc",
-        "  PrintSourceCode(os);\n  // Script files are often large",
-        "  // PrintSourceCode(os);\n  // Script files are often large",
-        "objects-printer remove PrintSourceCode",
-        log_file,
-    )
-    ok &= patch_file(
-        v8_dir / "src/diagnostics/objects-printer.cc",
+        printer,
         '  os << "\\n - age: " << age();\n  os << "\\n";\n}',
         '  os << "\\n - age: " << age();\n'
         '  os << "\\nStart BytecodeArray\\n";\n'
@@ -116,14 +128,14 @@ def main() -> int:
   std::cout << "\\nEnd SharedFunctionInfo\\n";
   std::cout << std::flush;
 
-  // Check whether the newly deserialized data"""
+  // Check whether the newly deserialized data should be merged into an"""
     if "Start SharedFunctionInfo" in cst:
         log("[OK] code-serializer: SFI print already present", log_file)
     elif anchor in cst:
         cs.write_text(cst.replace(anchor, replacement, 1), encoding="utf-8")
         log("[OK] code-serializer: added SFI print after deserialize", log_file)
     else:
-        log("[WARN] code-serializer: deserialize anchor not found", log_file)
+        log("[FAIL] code-serializer: deserialize anchor not found", log_file)
         ok = False
 
     log(f"=== done ok={ok} ===", log_file)

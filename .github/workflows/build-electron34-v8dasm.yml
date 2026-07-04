@@ -15,17 +15,9 @@ concurrency:
 
 env:
   V8_VERSION: "13.2.152.41"
-  ELECTRON_BUILD_ARGS: >-
-    v8_enable_pointer_compression=true
-    v8_enable_sandbox=true
-    v8_wasm_random_fuzzers=false
-    v8_enable_fuzztest=false
-    v8_promise_internal_field_count=1
-    v8_embedder_string="-electron.0"
-    v8_enable_snapshot_native_code_counters=false
-    v8_enable_javascript_promise_hooks=true
-    v8_enable_private_mapping_fork_optimization=true
-    v8_expose_public_symbols=true
+  DEPOT_TOOLS_WIN_TOOLCHAIN: "0"
+  vs2022_install: "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
+  _CL_: "/D_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
 
 jobs:
   build-v8dasm-windows:
@@ -44,56 +36,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/depot_tools
-          key: depot-tools-win-${{ runner.os }}-v3
+          key: depot-tools-win-${{ runner.os }}-v4
 
-      - name: Cache V8 source tree
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/v8
-          key: v8-source-${{ env.V8_VERSION }}-windows-v3
-
-      - name: Prepare cache-friendly paths
+      - name: Prepare depot_tools junction
         shell: pwsh
         run: |
           $dt = "${{ runner.temp }}/depot_tools"
-          $v8 = "${{ runner.temp }}/v8"
-          New-Item -ItemType Directory -Force -Path $dt, $v8 | Out-Null
-
-          foreach ($pair in @(
-            @{ Name = 'depot_tools'; Target = $dt },
-            @{ Name = 'v8'; Target = $v8 }
-          )) {
-            $link = Join-Path $env:USERPROFILE $pair.Name
-            if (Test-Path $link) {
-              cmd /c "rmdir `"$link`" 2>nul"
-            }
-            New-Item -ItemType Junction -Path $link -Target $pair.Target | Out-Null
-          }
-
+          New-Item -ItemType Directory -Force -Path $dt | Out-Null
+          $link = Join-Path $env:USERPROFILE 'depot_tools'
+          if (Test-Path $link) { cmd /c "rmdir `"$link`" 2>nul" }
+          New-Item -ItemType Junction -Path $link -Target $dt | Out-Null
           Write-Host "depot_tools gclient.bat: $(Test-Path (Join-Path $dt 'gclient.bat'))"
-          Write-Host "v8 checkout .git: $(Test-Path (Join-Path $v8 'v8\.git'))"
 
       - name: Build v8dasm
         shell: pwsh
-        env:
-          DEPOT_TOOLS_WIN_TOOLCHAIN: 0
         run: |
-          cmd /c "call scripts\v8dasm-builders\build-windows-electron34.cmd 1>build-step.log 2>&1"
+          python scripts/v8dasm-builders/build_windows_electron34.py *> build-step.log
           if ($LASTEXITCODE -ne 0) {
-            Get-Content build-step.log -Tail 80
-            if (Test-Path build-step.log) {
-              "`n## Build tail (last 80 lines)`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-              Get-Content build-step.log -Tail 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            }
+            Get-Content build-step.log -Tail 100
+            "`n## Build tail (last 100 lines)`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content build-step.log -Tail 100 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
             exit $LASTEXITCODE
           }
           Get-Content build-step.log -Tail 40
           $bin = Join-Path $env:GITHUB_WORKSPACE "Bin\$env:V8_VERSION.exe"
-          if (-not (Test-Path $bin)) {
-            Write-Host "ERROR: missing staged binary $bin"
-            Get-ChildItem Bin -ErrorAction SilentlyContinue | Format-Table Name, Length
-            exit 1
-          }
+          if (-not (Test-Path $bin)) { throw "missing staged binary $bin" }
           Get-Item $bin | Format-List Name, Length, FullName
 
       - name: Upload build logs on failure
@@ -106,25 +73,6 @@ jobs:
             build-step.log
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Stage View8 binary layout
-        shell: pwsh
-        run: |
-          $src = Join-Path $env:GITHUB_WORKSPACE "Bin\$env:V8_VERSION.exe"
-          if (-not (Test-Path $src)) {
-            $fallback = Join-Path $env:USERPROFILE "v8\v8\v8dasm-$env:V8_VERSION.exe"
-            Write-Host "Workspace binary missing, trying fallback: $fallback"
-            if (Test-Path $fallback) {
-              New-Item -ItemType Directory -Force -Path Bin | Out-Null
-              Copy-Item $fallback $src
-            }
-          }
-          if (-not (Test-Path $src)) {
-            Write-Host "USERPROFILE v8 tree:"
-            Get-ChildItem (Join-Path $env:USERPROFILE 'v8') -Recurse -Filter 'v8dasm*.exe' -ErrorAction SilentlyContinue | Format-Table FullName, Length
-            throw "v8dasm binary not found at $src"
-          }
-          Get-Item $src | Format-List Name, Length, FullName
 
       - name: Smoke test on sample preload
         shell: pwsh
