@@ -80,8 +80,12 @@ jobs:
           set BUILD_EXIT=%ERRORLEVEL%
           type build-step.log
           if %BUILD_EXIT% neq 0 exit /b %BUILD_EXIT%
+          if not exist "Bin\%V8_VERSION%.exe" (
+            echo ERROR: missing staged binary Bin\%V8_VERSION%.exe
+            exit /b 1
+          )
 
-      - name: Upload patch log on failure
+      - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -95,9 +99,21 @@ jobs:
       - name: Stage View8 binary layout
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path Bin | Out-Null
-          Copy-Item "$env:USERPROFILE\v8\v8\v8dasm-${{ env.V8_VERSION }}.exe" "Bin\${{ env.V8_VERSION }}.exe"
-          Get-Item "Bin\${{ env.V8_VERSION }}.exe" | Format-List Name, Length
+          $src = Join-Path $env:GITHUB_WORKSPACE "Bin\$env:V8_VERSION.exe"
+          if (-not (Test-Path $src)) {
+            $fallback = Join-Path $env:USERPROFILE "v8\v8\v8dasm-$env:V8_VERSION.exe"
+            Write-Host "Workspace binary missing, trying fallback: $fallback"
+            if (Test-Path $fallback) {
+              New-Item -ItemType Directory -Force -Path Bin | Out-Null
+              Copy-Item $fallback $src
+            }
+          }
+          if (-not (Test-Path $src)) {
+            Write-Host "USERPROFILE v8 tree:"
+            Get-ChildItem (Join-Path $env:USERPROFILE 'v8') -Recurse -Filter 'v8dasm*.exe' -ErrorAction SilentlyContinue | Format-Table FullName, Length
+            throw "v8dasm binary not found at $src"
+          }
+          Get-Item $src | Format-List Name, Length, FullName
 
       - name: Smoke test on sample preload
         shell: pwsh

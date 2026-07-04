@@ -102,24 +102,38 @@ set OUT_NAME=v8dasm-%V8_VERSION%.exe
 set DASM=%WORKSPACE_DIR%\Disassembler\v8dasm.cpp
 set LLVM_BIN=%V8_DIR%\third_party\llvm-build\Release+Asserts\bin
 
-if exist "%LLVM_BIN%\clang-cl.exe" (
-    "%LLVM_BIN%\clang-cl.exe" %DASM% /nologo /std:c++20 /O2 /EHsc ^
-        /I%V8_DIR%\include /I%V8_DIR%\gen ^
-        /DV8_COMPRESS_POINTERS /DV8_ENABLE_SANDBOX ^
-        /Foout.gn\x64.release\v8dasm.obj ^
-        /link /LIBPATH:out.gn\x64.release\obj v8_libbase.lib v8_libplatform.lib v8_monolith.lib winmm.lib Dbghelp.lib ^
-        /OUT:%OUT_NAME%
-) else (
+if not exist "%LLVM_BIN%\clang-cl.exe" (
     echo ERROR: clang-cl not found at %LLVM_BIN%
     exit /b 1
 )
 
-if errorlevel 1 exit /b 1
-if not exist %OUT_NAME% (
-    echo ERROR: %OUT_NAME% not created
+"%LLVM_BIN%\clang-cl.exe" %DASM% /nologo /std:c++20 /O2 /EHsc ^
+    /I%V8_DIR%\include /I%V8_DIR%\gen ^
+    /DV8_COMPRESS_POINTERS /DV8_ENABLE_SANDBOX ^
+    /Foout.gn\x64.release\v8dasm.obj ^
+    /link /LIBPATH:out.gn\x64.release\obj v8_libbase.lib v8_libplatform.lib v8_monolith.lib winmm.lib Dbghelp.lib ^
+    /OUT:%OUT_NAME%
+set LINK_RC=%ERRORLEVEL%
+if not %LINK_RC%==0 (
+    echo ERROR: clang-cl link failed with exit code %LINK_RC%
+    exit /b %LINK_RC%
+)
+
+if not exist "%OUT_NAME%" (
+    echo ERROR: %OUT_NAME% not created in %CD%
     exit /b 1
 )
 
+echo =====[ stage binary to workspace ]=====
+if not exist "%WORKSPACE_DIR%\Bin" mkdir "%WORKSPACE_DIR%\Bin"
+copy /Y "%OUT_NAME%" "%WORKSPACE_DIR%\Bin\%V8_VERSION%.exe"
+if errorlevel 1 exit /b 1
+copy /Y "%OUT_NAME%" "%WORKSPACE_DIR%\v8dasm-%V8_VERSION%.exe"
+if errorlevel 1 exit /b 1
+
 echo =====[ SUCCESS ]=====
-dir %OUT_NAME%
+echo V8_DIR=%V8_DIR%
+echo OUT=%CD%\%OUT_NAME%
+dir "%OUT_NAME%"
+dir "%WORKSPACE_DIR%\Bin\%V8_VERSION%.exe"
 exit /b 0
